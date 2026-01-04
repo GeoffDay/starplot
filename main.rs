@@ -1,5 +1,6 @@
 //! This code borrowed from the egui::plot example to implement custom gestures to pan and zoom in the plot
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+#![allow(unused)]
 
 use std::arch::x86_64;
 
@@ -9,9 +10,11 @@ use egui_plot::{Legend, Line, PlotPoints};
 
 const GRAVITY: f64 = 6.674e-11; // Newtons Gravitational constant 6.674×10−11 m3⋅kg−1⋅s−2
 
+
 #[derive(Debug, Clone)]
 struct Star {
   name: String,
+  active: bool,
   pos_x: f64,
   pos_y: f64,
   pos_z: f64,
@@ -23,7 +26,6 @@ struct Star {
 
 
 
-
 impl Star {
     fn distance(&self, other: &Star) -> f64 {
         ((self.pos_x - other.pos_x).powi(2) + (self.pos_y - other.pos_y).powi(2) + (self.pos_z - other.pos_z).powi(2)).sqrt()
@@ -31,58 +33,60 @@ impl Star {
 
     fn force(&self, other: &Star) -> f64 {
          // F = Gravity * (mass1 * mass2) / distance^2
-        ((self.mass * other.mass) * GRAVITY) / ((self.pos_x - other.pos_x).powi(2) + (self.pos_y - other.pos_y).powi(2) + (self.pos_z - other.pos_z).powi(2))
+        ((self.mass * other.mass) * GRAVITY) / Star::distance(&self, &other)
+    }
+    
+    fn disx(&self, other: &Star) -> f64 {
+        self.pos_x - other.pos_x
+    }
+    
+    fn disy(&self, other: &Star) -> f64 {
+        self.pos_y - other.pos_y
+    }
+    
+    fn disz(&self, other: &Star) -> f64 {
+        self.pos_z - other.pos_z
     }
 }
 
 
 fn main() -> Result<(), eframe::Error> {
-    let mut starr: f64;
-    // Create an empty vector of Stars
-    let mut star_vec: Vec<Star> = Vec::new();  
+   
+    let mut star_vec_a: Vec<Star> = Vec::new();   	// Create an empty vector of Stars
 
-        star_vec.push(Star {name: String::from("Fred"), pos_x: 10.0, pos_y: 50.0, pos_z: -25.0, vel_x: 5.0, vel_y: 3.0, vel_z: 10.0, mass: 10.0});
-        star_vec.push(Star {name: String::from("Wilma"), pos_x: -100.0, pos_y: 50.0, pos_z: -5.0, vel_x: -5.0, vel_y: -4.0, vel_z: 2.0, mass: 31.0});
-        star_vec.push(Star {name: String::from("Barny"), pos_x: 50.0, pos_y: -10.0, pos_z: 25.0, vel_x: 5.0, vel_y: -3.0, vel_z: -7.0, mass: 20.0});
-        star_vec.push(Star {name: String::from("Betty"), pos_x: -25.0, pos_y: 50.0, pos_z: -25.0, vel_x: 5.0, vel_y: 3.0, vel_z: 10.0, mass: 10.0});
-        star_vec.push(Star {name: String::from("BammBamm"), pos_x: 114.0, pos_y: 50.0, pos_z: -2.0, vel_x: 5.0, vel_y: 3.0, vel_z: 10.0, mass: 3.0});
-        star_vec.push(Star {name: String::from("Pebbles"), pos_x: 30.0, pos_y: 30.0, pos_z: 25.0, vel_x: -5.0, vel_y: 3.0, vel_z: 10.0, mass: 8.0});
+        star_vec_a.push(Star {name: String::from("Fred"), active: true, pos_x: 10.0, pos_y: 50.0, pos_z: -25.0, vel_x: 5.0, vel_y: 3.0, vel_z: 10.0, mass: 10.0});
+        star_vec_a.push(Star {name: String::from("Wilma"), active: true, pos_x: -100.0, pos_y: 50.0, pos_z: -5.0, vel_x: -5.0, vel_y: -4.0, vel_z: 2.0, mass: 31.0});
+        star_vec_a.push(Star {name: String::from("Barny"), active: true, pos_x: 50.0, pos_y: -10.0, pos_z: 25.0, vel_x: 5.0, vel_y: -3.0, vel_z: -7.0, mass: 20.0});
+        star_vec_a.push(Star {name: String::from("Betty"), active: true, pos_x: -25.0, pos_y: 50.0, pos_z: -25.0, vel_x: 5.0, vel_y: 3.0, vel_z: 10.0, mass: 10.0});
+        star_vec_a.push(Star {name: String::from("BammBamm"), active: true, pos_x: 114.0, pos_y: 50.0, pos_z: -2.0, vel_x: 5.0, vel_y: 3.0, vel_z: 10.0, mass: 3.0});
+        star_vec_a.push(Star {name: String::from("Pebbles"), active: true, pos_x: 30.0, pos_y: 30.0, pos_z: 25.0, vel_x: -5.0, vel_y: 3.0, vel_z: 10.0, mass: 8.0});
+    
+    let mut star_vec_b: Vec<Star> = star_vec_a.clone();             // make a copy of a which will take changes
+    
+	let sliced_star_vec = &star_vec_a[..];
+	let other_star_vec = &star_vec_b[..];
+	let mut force:f64 = 0.0;
 
-    let star_base = Star { 
-        name: String::from("Base"),
-        pos_x: 0.0,
-        pos_y: 0.0,
-        pos_z: 0.0,
-        vel_x: 0.0,
-        vel_y: 0.0,
-        vel_z: 0.0,
-        mass: 1000.0,
-    };
-
-    // let first_star: &Star = &star_vec[2];
-    // let second_star: &Star = &star_vec[4];
-
-
-    //         // Iterate over elements
-    for (i:&{Star},j: &{Star}) in star_vec.into_iter().flat_map(|star_vec) {
-    //     let mut i: Star = first_star.clone();
-         println!("first_star: {:?}", first_star.name);
-
-                 for second_star: Star in star_vec.iter().clone() {
-    //     let mut j: Star = star_vec.iter[3];
-         println!("second_star: {:?}", second_star.name);
-
-
-  
-    //          if second_star > first_star {
-    //     //         let star_two = second_star.clone();
-    //            println!("Name: {:?} & {:?}", first_star.name, first_star.pos_x);
+    for (i, j) in (0..sliced_star_vec.len()).flat_map(|i| (0..i).map(move |j| (i,j))) {
+        // dbg!(i,j,&sliced_star_vec_a[i].name, &sliced_star_vec_a[j].name);
+        // dbg!(Star::distance(&sliced_star_vec_a[i], &sliced_star_vec_a[j])); 
+        // dbg!(Star::force(&sliced_star_vec_a[i], &sliced_star_vec_a[j])); 
+        let mut force_i:f64 = Star::force(&sliced_star_vec[i], &sliced_star_vec[j]);
+        let mut force_j:f64 = force_i.clone() / &sliced_star_vec[j].mass;
+        force_i = force_i / &sliced_star_vec[i].mass;
+        dbg!(force_i);
+        dbg!(force_j);
         
-    // //     println!("The distance is {} things.", starr.distance(&star_one));
-    //     // println!("The force is {} things.", starr.force(&star_base));
-            //  }
-        }
+        
+        star_vec_b[i].vel_x = sliced_star_vec[i].vel_x - force_i * Star::disx(&sliced_star_vec[i], &sliced_star_vec[j]);
+        star_vec_b[i].vel_y = sliced_star_vec[i].vel_y - force_i * Star::disy(&sliced_star_vec[i], &sliced_star_vec[j]);
+        star_vec_b[i].vel_z = sliced_star_vec[i].vel_z - force_i * Star::disz(&sliced_star_vec[i], &sliced_star_vec[j]);
+        // star_vec_b[i].vel_x = star_vec_b[i].vel_x + force * sliced_star_vec_a[i].mass * 
+        star_vec_b[j].vel_x = sliced_star_vec[j].vel_x - force_j * Star::disx(&sliced_star_vec[i], &sliced_star_vec[j]);
+        star_vec_b[j].vel_y = sliced_star_vec[j].vel_y - force_j * Star::disy(&sliced_star_vec[i], &sliced_star_vec[j]);
+        star_vec_b[j].vel_z = sliced_star_vec[j].vel_z - force_j * Star::disz(&sliced_star_vec[i], &sliced_star_vec[j]);
     }
+    
  
    
     
